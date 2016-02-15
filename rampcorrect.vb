@@ -1,57 +1,76 @@
 Function GetDesBlockRow(ByVal Block As Integer) As Integer
     Dim DesRow As Integer
-    DesRow = 2
+    DesRow = Sheets("DESIRED").Cells(106, 2).Value
     GetDesBlockRow = DesRow + Block - 1
 End Function
 
 Function GetDCBlockRow(ByVal Block As Integer) As Integer
     Dim DCRow As Integer
-    DCRow = 3
+    DCRow = Sheets("ONBARDC").Cells(104, 2).Value
     GetDCBlockRow = DCRow + Block - 1
 End Function
-
+Function AlphaColumn(ByVal Alphabet As String) As Integer
+    AlphaColumn = Range(Alphabet & 1).Column
+End Function
+Sub PasteDCFromWorkbook()
+    Dim wb As Workbook
+    Application.ScreenUpdating = False ' turn off the screen updating
+    Set wb = Workbooks.Open(ThisWorkbook.Path & "\DC_SHEET.xlsm", True, True)
+    ' open the source workbook, read only
+    
+    ' read data from the source workbook
+    wb.Sheets("ONBARDC").Range("A1:AH100").Copy Destination:=Sheets("ONBARDC").Range("A1")
+    wb.Close False ' close the source workbook without saving any changes
+    Set wb = Nothing ' free memory
+    Application.ScreenUpdating = True ' turn on the screen updating
+End Sub
 ''''''''''''''''''''''''''''''''''''''''''''
 'Main WorkFlow
 ''''''''''''''''''''''''''''''''''''''''''''
 ''Goto a row in feasible sheet
 ''Here everything is initially desired
 ''If the feasible sum of the row is violating the ramp
-''''Ramp up/ramp down the prev row by distributing ramp
+''''Ramp up/ramp down the prev row by distributing maximum ramp
 Sub RampCorrect1()
+''Get DC from other sheet
 'First validate the headings of desired and entitlement and feasible
 'Solve < 0 Constraint and > entitlement constraint
 'Solve ramp till total available dissipation
 'first make feasible = desiredfeasible
-    ''TODO Find the columns that can be ramped
 'In Desired Sheet
+    Application.ScreenUpdating = False
+    Dim i, j, k As Integer
     Dim DesStartCol, DesEndCol  As Integer
-    DesStartCol = 5
-    DesEndCol = 17
+    DesStartCol = AlphaColumn(Sheets("DESIRED").Cells(103, 2).Value) '5
+    DesEndCol = AlphaColumn(Sheets("DESIRED").Cells(104, 2).Value) '17
     
 'In Entitlement Sheet
     Dim EntRow, EntStartCol, EntEndCol, DCCol  As Integer
-    DCCol = 3
-    EntRow = 2
-    EntStartCol = 3
-    EntEndCol = 15
+    DCCol = AlphaColumn(Sheets("ONBARDC").Cells(103, 2).Value) '3
+    EntRow = Sheets("ENTS").Cells(105, 2).Value ''2
+    EntStartCol = AlphaColumn(Sheets("ENTS").Cells(103, 2).Value) '3
+    EntEndCol = AlphaColumn(Sheets("ENTS").Cells(104, 2).Value) '15
     
     Dim DesSums(1 To 96) As Double
     Dim DesDiffs(1 To 96) As Double
-    Dim i, j, k As Integer
     Dim Ent As Double
     
 'Make feasible, desiredlegal = desired
     For i = 1 To 96
         For j = DesStartCol To DesEndCol
-            Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value = Worksheets("DESIRED").Cells(GetDesBlockRow(i), j).Value
-            Ent = Worksheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Worksheets("DESIREDFEASIBLE").Cells(GetDCBlockRow(i), DCCol).Value
-            If (Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j) < 0) Then
-                Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j) = 0
+            Ent = Sheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Sheets("ONBARDC").Cells(GetDCBlockRow(i), DCCol).Value
+            If (Sheets("DESIRED").Cells(GetDesBlockRow(i), j).Value = "FULL" Or Sheets("DESIRED").Cells(GetDesBlockRow(i), j).Value = "full" Or Sheets("DESIRED").Cells(GetDesBlockRow(i), j).Value = "Full") Then
+                Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value = Ent
             End If
-            If Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value > Ent Then
-                Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value = Ent
+            Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value = Sheets("DESIRED").Cells(GetDesBlockRow(i), j).Value
+            
+            If (Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j) < 0) Then
+                Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j) = 0
             End If
-            Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value
+            If Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value > Ent Then
+                Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value = Ent
+            End If
+            Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value
         Next j
     Next i
             
@@ -60,13 +79,13 @@ Sub RampCorrect1()
     For i = 1 To 1
         DesSums(i) = 0
         For j = DesStartCol To DesEndCol
-            DesSums(i) = DesSums(i) + Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value
+            DesSums(i) = DesSums(i) + Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), j).Value
         Next j
     Next i
-    Dim MaxRampRow, MaxRampCol As Integer
-    MaxRampRow = 2
-    MaxRampCol = 2
-'MsgBox (Worksheets("DESIRED").Cells(MaxRampRow, MaxRampCol))
+    Dim MaxRampCol As Integer
+    
+    MaxRampCol = AlphaColumn(Sheets("DESIRED").Cells(105, 2).Value) '2
+'MsgBox (Sheets("DESIRED").Cells(MaxRampRow, MaxRampCol))
     Dim MaxRamp As Double
     'Now solve ramps row by row from rows 2 to 96 rows
 
@@ -76,22 +95,22 @@ Sub RampCorrect1()
     'Calculate DesiredSums and DesiredDifferences
         DesSums(i) = 0
         For j = DesStartCol To DesEndCol
-            DesSums(i) = DesSums(i) + Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value
+            DesSums(i) = DesSums(i) + Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value
         Next j
         DesDiffs(i) = DesSums(i) - DesSums(i - 1)
         'Color Row Total Sum Figure as White Before checking for Ramp Violation of the Row
-        Worksheets("DESIRED").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
-        Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
-        Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
+        Sheets("DESIRED").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
+        Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
+        Sheets("FEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 255)
         
-        If Abs(DesDiffs(i)) - 1 > Worksheets("FEASIBLE").Cells(MaxRampRow + i - 1, MaxRampCol).Value Then
+        If Abs(DesDiffs(i)) - 1 > Sheets("FEASIBLE").Cells(GetDesBlockRow(i), MaxRampCol).Value Then
         '''''''''''''We are in a Ramp Violating row Now
-                Worksheets("DESIRED").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
-                Worksheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
-                Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
+                Sheets("DESIRED").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
+                Sheets("DESIREDFEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
+                Sheets("FEASIBLE").Cells(GetDesBlockRow(i), DesEndCol + 4).Interior.Color = RGB(255, 255, 0)
                 
                 ''Available rampup = something
-                MaxRamp = Worksheets("DESIRED").Cells(MaxRampRow + i - 1, MaxRampCol).Value
+                MaxRamp = Sheets("DESIRED").Cells(GetDesBlockRow(i), MaxRampCol).Value
                 ''Desired Ramps of recipients  = array
                 ''Entitlements of recipients  = array
                 ''Given Ramps to recipients  = array initially zero
@@ -103,14 +122,14 @@ Sub RampCorrect1()
                     
                     For j = DesStartCol To DesEndCol
                     '''''''''''''We are in +ve Row Column
-                        desiredRamps(j) = Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value - Worksheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value
+                        desiredRamps(j) = Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value - Sheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value
                         cateredRamps(j) = 0
-                        Entitlements(j) = Worksheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Worksheets("DESIREDFEASIBLE").Cells(GetDCBlockRow(i), DCCol).Value
+                        Entitlements(j) = Sheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Sheets("ONBARDC").Cells(GetDCBlockRow(i), DCCol).Value
                         ''Highlight the cell if desired Ramp is possitive
                         If desiredRamps(j) > 0 Then
-                            Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Interior.Color = RGB(255, 255, 0)
+                            Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Interior.Color = RGB(255, 255, 0)
                         Else
-                            Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Interior.Color = RGB(255, 255, 255)
+                            Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Interior.Color = RGB(255, 255, 255)
                         End If
                         
                     '''''''''''''We are out of +ve Row Column
@@ -122,7 +141,7 @@ Sub RampCorrect1()
                     ''Give the ramps that are calculated from the function to the cells
                     For j = DesStartCol To DesEndCol
                     '''''''''''''We are in +ve Row Column
-                        Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Worksheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value + cateredRamps(j)
+                        Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Sheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value + cateredRamps(j)
                     '''''''''''''We are out of +ve Row Column
                     Next j
                 '''''''''''''We out of +ve Ramp Violating Row
@@ -130,9 +149,9 @@ Sub RampCorrect1()
                 '''''''''''''We are in -ve Ramp Violating Row
                     For j = DesStartCol To DesEndCol
                     '''''''''''''We are in -ve Row Column
-                        desiredRamps(j) = -Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value + Worksheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value
+                        desiredRamps(j) = -Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value + Sheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value
                         cateredRamps(j) = 0
-                        Entitlements(j) = Worksheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Worksheets("DESIREDFEASIBLE").Cells(GetDCBlockRow(i), DCCol).Value
+                        Entitlements(j) = Sheets("ENTS").Cells(GetDesBlockRow(i), j - DesStartCol + EntStartCol).Value * 0.01 * Sheets("ONBARDC").Cells(GetDCBlockRow(i), DCCol).Value
                     '''''''''''''We are out of -ve Row Column
                     Next j
                     
@@ -142,7 +161,7 @@ Sub RampCorrect1()
                     ''Give the ramps that are calculated from the function to the cells
                     For j = DesStartCol To DesEndCol
                     '''''''''''''We are in +ve Row Column
-                        Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Worksheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value - cateredRamps(j)
+                        Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value = Sheets("FEASIBLE").Cells(GetDesBlockRow(i - 1), j).Value - cateredRamps(j)
                     '''''''''''''We are out of -ve Row Column
                     Next j
                     
@@ -154,10 +173,11 @@ Sub RampCorrect1()
         'Recalculating the sum of row
         DesSums(i) = 0
         For j = DesStartCol To DesEndCol
-            DesSums(i) = DesSums(i) + Worksheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value
+            DesSums(i) = DesSums(i) + Sheets("FEASIBLE").Cells(GetDesBlockRow(i), j).Value
         Next j
     '''''''''''''We got out of a block Now
     Next i
+    Application.ScreenUpdating = True
 End Sub
 
 ''''''''''''''''''''''''''''''''''''''''''''
